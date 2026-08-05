@@ -20,15 +20,18 @@ class NFTStudioApp {
       if (!file) return;
 
       this.ui.logConsole(`Loading contract ZIP: ${file.name}`);
-      const zip = await JSZip.loadAsync(file);
-      const analysis = await this.analyzer.analyzeSolidityFiles(zip.files);
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const analysis = await this.analyzer.analyzeSolidityFiles(zip.files);
 
-      document.getElementById('contract-analysis-results').innerHTML = `
-        <p><strong>Detected Layers:</strong> ${analysis.layerOrder.length}</p>
-        <p><strong>Trait Mappings:</strong> ${Object.keys(analysis.traitMappings).length} mapped</p>
-      `;
-
-      this.ui.logConsole("Contract analysis complete.");
+        document.getElementById('contract-analysis-results').innerHTML = `
+          <p><strong>Detected Layers:</strong> ${analysis.layerOrder.length}</p>
+          <p><strong>Trait Mappings:</strong> ${Object.keys(analysis.traitMappings).length} mapped</p>
+        `;
+        this.ui.logConsole("Contract analysis complete.");
+      } catch (err) {
+        this.ui.logConsole(`Error reading contract ZIP: ${err.message}`);
+      }
     });
 
     // Layer ZIP Upload
@@ -37,20 +40,31 @@ class NFTStudioApp {
       if (!file) return;
 
       this.ui.logConsole(`Extracting assets from layer archive: ${file.name}`);
-      const zip = await JSZip.loadAsync(file);
-      
-      const { order } = await this.layerManager.processLayerZip(
-        zip.files, 
-        this.analyzer.detectedOrder
-      );
+      try {
+        const zip = await JSZip.loadAsync(file);
+        
+        // Pass zip.files properly to LayerManager
+        const { order, layerCount } = await this.layerManager.processLayerZip(
+          zip.files, 
+          this.analyzer.detectedOrder
+        );
 
-      this.ui.updateLayerTreeUI(order, (newOrder) => {
-        this.layerManager.setLayerOrder(newOrder);
-        this.ui.updateLayerTreeUI(newOrder, () => {});
-      });
+        if (layerCount === 0) {
+          this.ui.logConsole("Error: No valid images found inside ZIP folders!");
+          alert("ZIP ফাইলের ভেতর কোনো ফোল্ডার বা ইমেজ পাওয়া যায়নি। দয়া করে ফোল্ডারসহ জিপ আপলোড করুন।");
+          return;
+        }
 
-      this.ui.logConsole("Layers imported successfully.");
-      this.triggerRandomPreview();
+        this.ui.updateLayerTreeUI(order, (newOrder) => {
+          this.layerManager.setLayerOrder(newOrder);
+          this.ui.updateLayerTreeUI(newOrder, () => {});
+        });
+
+        this.ui.logConsole(`Layers imported successfully (${layerCount} layers).`);
+        this.triggerRandomPreview();
+      } catch (err) {
+        this.ui.logConsole(`Error extracting layers: ${err.message}`);
+      }
     });
 
     // Preview Randomize Button
@@ -62,9 +76,13 @@ class NFTStudioApp {
     document.getElementById('btn-start-gen').addEventListener('click', () => {
       const targetCount = parseInt(document.getElementById('gen-count').value, 10);
       
+      if (this.layerManager.layerOrder.length === 0) {
+        alert("দয়া করে প্রথমে লেয়ার ZIP আপলোড করুন!");
+        return;
+      }
+
       this.ui.logConsole(`Starting collection generation: Target = ${targetCount} NFTs`);
       document.getElementById('btn-start-gen').disabled = true;
-      document.getElementById('btn-pause-gen').disabled = false;
 
       this.engine.generateCollection(
         targetCount,
@@ -79,8 +97,10 @@ class NFTStudioApp {
           document.getElementById('generation-progress-bar').style.width = `${pct}%`;
 
           // Live Preview current batch item
-          this.ui.renderPreview(progress.latestNft.traits);
-          this.ui.updateMetadataPreview(progress.latestNft.metadata);
+          if (progress.latestNft && progress.latestNft.traits) {
+            this.ui.renderPreview(progress.latestNft.traits);
+            this.ui.updateMetadataPreview(progress.latestNft.metadata);
+          }
         },
         (completedNFTs) => {
           // Completion
@@ -88,7 +108,6 @@ class NFTStudioApp {
           this.ui.logConsole(`Successfully generated ${completedNFTs.length} unique NFTs.`);
           document.getElementById('btn-export-zip').disabled = false;
           document.getElementById('btn-start-gen').disabled = false;
-          document.getElementById('btn-pause-gen').disabled = true;
         }
       );
     });
