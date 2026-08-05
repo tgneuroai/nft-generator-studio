@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NFT Generator Studio Pro</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- JSZip dependency for client-side archive handling -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body class="dark-theme">
+  <div class="app-container">
+    
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar left-sidebar">
+      <div class="sidebar-header">
+        <h2>Studio Controls</h2>
+      </div>
+      
+      <div class="accordion">
+        <!-- Contract Upload Section -->
+        <section class="accordion-item active">
+          <div class="accordion-header">1. Contract Analyzer</div>
+          <div class="accordion-body">
+            <div class="drop-zone" id="drop-zone-contract">
+              <p>Drag & Drop Contract ZIP/Folder</p>
+              <input type="file" id="file-contract" accept=".zip" hidden>
+              <button class="btn" onclick="document.getElementById('file-contract').click()">Browse Contract</button>
+            </div>
+            <div id="contract-analysis-results" class="analysis-box"></div>
+          </div>
+        </section>
+
+        <!-- Layers Upload Section -->
+        <section class="accordion-item active">
+          <div class="accordion-header">2. Layer Import</div>
+          <div class="accordion-body">
+            <div class="drop-zone" id="drop-zone-layers">
+              <p>Drag & Drop Layers ZIP/Folder</p>
+              <input type="file" id="file-layers" accept=".zip" hidden>
+              <button class="btn" onclick="document.getElementById('file-layers').click()">Browse Layers</button>
+            </div>
+            <div id="layer-import-status" class="status-box"></div>
+          </div>
+        </section>
+
+        <!-- Generation Controls -->
+        <section class="accordion-item active">
+          <div class="accordion-header">3. Generation Studio</div>
+          <div class="accordion-body">
+            <div class="form-group">
+              <label>Collection Size</label>
+              <input type="number" id="gen-count" value="6666">
+            </div>
+            <div class="form-group">
+              <label>Original Collection Count</label>
+              <input type="number" id="orig-count" value="4444">
+            </div>
+            <div class="button-group">
+              <button class="btn btn-primary" id="btn-start-gen">Start Generation</button>
+              <button class="btn btn-danger" id="btn-pause-gen" disabled>Pause</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Export -->
+        <section class="accordion-item active">
+          <div class="accordion-header">4. Export</div>
+          <div class="accordion-body">
+            <button class="btn btn-success" id="btn-export-zip" disabled>Export ZIP Package</button>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <!-- CENTER CANVAS (PREVIEW) -->
+    <main class="center-stage">
+      <div class="viewport-toolbar">
+        <button class="btn btn-icon" id="btn-zoom-in">+</button>
+        <button class="btn btn-icon" id="btn-zoom-out">-</button>
+        <button class="btn btn-icon" id="btn-zoom-reset">100%</button>
+        <button class="btn" id="btn-randomize">Randomize Preview</button>
+      </div>
+      
+      <div class="canvas-viewport" id="viewport">
+        <div class="canvas-container" id="canvas-wrapper">
+          <canvas id="nft-preview-canvas" width="720" height="720"></canvas>
+        </div>
+      </div>
+
+      <div class="viewport-footer">
+        <button class="btn" id="btn-prev-nft">&lt; Prev</button>
+        <span id="preview-token-id">Token ID: #---</span>
+        <button class="btn" id="btn-next-nft">Next &gt;</button>
+      </div>
+    </main>
+
+    <!-- RIGHT SIDEBAR -->
+    <aside class="sidebar right-sidebar">
+      <div class="sidebar-header">
+        <h2>Layer Tree & Inspector</h2>
+      </div>
+      <div class="panel-section">
+        <h3>Detected Layer Order</h3>
+        <ul class="layer-tree" id="layer-tree-list"></ul>
+      </div>
+      <div class="panel-section">
+        <h3>Selected Trait Properties</h3>
+        <div id="trait-inspector" class="inspector-box">Select a layer to view traits</div>
+      </div>
+      <div class="panel-section">
+        <h3>Metadata Preview</h3>
+        <pre class="json-preview" id="json-preview-box">{}</pre>
+      </div>
+    </aside>
+
+    <!-- BOTTOM CONSOLE -->
+    <footer class="bottom-console">
+      <div class="console-metrics">
+        <div class="metric"><span>Status:</span> <strong id="stat-status">Idle</strong></div>
+        <div class="metric"><span>Progress:</span> <strong id="stat-progress">0 / 0</strong></div>
+        <div class="metric"><span>Duplicates Avoided:</span> <strong id="stat-collisions">0</strong></div>
+        <div class="metric"><span>Speed:</span> <strong id="stat-speed">0 NFT/s</strong></div>
+      </div>
+      <div class="progress-bar-container">
+        <div class="progress-bar" id="generation-progress-bar" style="width: 0%;"></div>
+      </div>
+      <div class="console-log" id="console-log-box"></div>
+    </footer>
+
+  </div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
