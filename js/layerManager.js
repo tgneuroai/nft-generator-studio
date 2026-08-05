@@ -22,10 +22,23 @@ export class LayerManager {
       const parts = path.split('/');
       if (parts.length < 2) continue;
 
-      const layerName = parts[parts.length - 2];
       const fileName = parts[parts.length - 1];
 
       if (!fileName.match(/\.(png|svg|webp)$/i)) continue;
+
+      // Determine layer/category name.
+      // Case A: nested zip, e.g. "Background/Steel.svg" -> use parent folder name.
+      // Case B: flat zip, e.g. "Hat43/Background_005_Steel.svg" (all assets dumped
+      //         into a single top folder) -> derive category from filename prefix
+      //         (text before the first underscore), since that's how these trait
+      //         packs are usually named (Background_..., Skin_..., Eyes_..., etc).
+      let layerName;
+      if (parts.length >= 3) {
+        layerName = parts[parts.length - 2];
+      } else {
+        const prefixMatch = fileName.match(/^([A-Za-z]+)_/);
+        layerName = prefixMatch ? prefixMatch[1] : parts[parts.length - 2];
+      }
 
       const blob = await file.async('blob');
       const objectUrl = URL.createObjectURL(blob);
