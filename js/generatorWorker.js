@@ -21,13 +21,40 @@ self.onmessage = async function (e) {
       self.postMessage({ type: 'STATUS', message: 'Worker Initialized Successfully' });
       break;
 
-    case 'START_GENERATION':
+    case 'START_GENERATION': {
       const { targetCount } = payload;
       let generated = 0;
       let collisionCount = 0;
       const startTime = performance.now();
 
-      while (generated < targetCount) {
+      // Safety guard: figure out the maximum number of *unique* combinations
+      // that can actually exist given the imported layers, and never ask the
+      // loop below to produce more than that. Without this cap, requesting
+      // more unique NFTs than mathematically possible (e.g. 6666 when only
+      // ~109 unique combinations exist) makes the "while" loop below spin
+      // forever, since it can never find a new unique signature - freezing
+      // the tab.
+      let maxPossibleCombinations = 1;
+      for (const layerName of layerOrder) {
+        const traitList = layersMap.get(layerName);
+        if (traitList && traitList.length > 0) {
+          maxPossibleCombinations *= traitList.length;
+        }
+      }
+      const effectiveTarget = Math.min(targetCount, maxPossibleCombinations);
+      // Generous but finite retry budget in case of duplicate collisions.
+      const maxAttempts = Math.max(effectiveTarget * 200, 5000);
+      let attempts = 0;
+
+      if (effectiveTarget < targetCount) {
+        self.postMessage({
+          type: 'STATUS',
+          message: `Warning: only ${maxPossibleCombinations} unique combinations are possible with the imported layers. Capping generation at ${effectiveTarget} (requested ${targetCount}).`
+        });
+      }
+
+      while (generated < effectiveTarget && attempts < maxAttempts) {
+        attempts++;
         const candidate = generateCandidateTraits();
 
         // Check for duplicates across historical and current generation sets
@@ -70,10 +97,13 @@ self.onmessage = async function (e) {
         type: 'COMPLETE',
         payload: {
           totalGenerated: generated,
-          collisions: collisionCount
+          collisions: collisionCount,
+          requested: targetCount,
+          maxPossibleCombinations: maxPossibleCombinations
         }
       });
       break;
+    }
 
     case 'CLEAR':
       existingSignatures.clear();
