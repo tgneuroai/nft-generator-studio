@@ -105,7 +105,11 @@ class NFTStudioApp {
         (completedNFTs) => {
           // Completion
           document.getElementById('stat-status').textContent = "Complete";
-          this.ui.logConsole(`Successfully generated ${completedNFTs.length} unique NFTs.`);
+          if (completedNFTs.length < targetCount) {
+            this.ui.logConsole(`Generated ${completedNFTs.length} unique NFTs (requested ${targetCount}). Your imported layers only support ${completedNFTs.length} unique combinations - add more trait variations per category to reach a higher count.`);
+          } else {
+            this.ui.logConsole(`Successfully generated ${completedNFTs.length} unique NFTs.`);
+          }
           document.getElementById('btn-export-zip').disabled = false;
           document.getElementById('btn-start-gen').disabled = false;
         }
