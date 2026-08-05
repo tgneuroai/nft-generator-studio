@@ -1,5 +1,6 @@
 /**
- * Main Generation Orchestrator
+ * js/generatorEngine.js
+ * Generator Engine using Web Worker for high performance background rendering
  */
 export class GeneratorEngine {
   constructor(layerManager) {
@@ -9,20 +10,14 @@ export class GeneratorEngine {
     this.isGenerating = false;
     this.isPaused = false;
     this.collisionCount = 0;
+    this.worker = null;
   }
 
-  /**
-   * Populate initial hash set with existing collection trait combinations
-   * @param {Array} originalSignatures - Unique string hashes representing existing 4,444 collection
-   */
   loadExistingCollection(originalSignatures) {
     this.existingSignatures.clear();
     originalSignatures.forEach(sig => this.existingSignatures.add(sig));
   }
 
-  /**
-   * Generates a single candidate trait combination
-   */
   generateCandidateTraits() {
     const traits = [];
     const signatureParts = [];
@@ -31,7 +26,6 @@ export class GeneratorEngine {
       const traitList = this.layerManager.layers.get(layerName);
       if (!traitList || traitList.length === 0) continue;
 
-      // Weighted selection algorithm
       const selected = this.weightedRandomSelect(traitList);
       traits.push({
         layer: layerName,
@@ -47,76 +41,95 @@ export class GeneratorEngine {
   }
 
   weightedRandomSelect(traits) {
-    let totalWeight = traits.reduce((acc, t) => acc + t.weight, 0);
+    let totalWeight = traits.reduce((acc, t) => acc + (t.weight || 1.0), 0);
     let random = Math.random() * totalWeight;
 
     for (const trait of traits) {
-      if (random < trait.weight) return trait;
-      random -= trait.weight;
+      if (random < (trait.weight || 1.0)) return trait;
+      random -= (trait.weight || 1.0);
     }
     return traits[0];
   }
 
   /**
-   * Generates total target collection ensuring 0 duplicate collisions
+   * Generates total target collection via Web Worker
    */
   async generateCollection(targetCount, onProgress, onComplete) {
-    this.isGenerating = true;
-    this.isPaused = false;
-    let generated = 0;
-    const startTime = performance.now();
-
-    while (generated < targetCount && this.isGenerating) {
-      if (this.isPaused) {
-        await new Promise(r => setTimeout(r, 200));
-        continue;
-      }
-
-      const candidate = this.generateCandidateTraits();
-
-      // DUPLICATE PROTECTION: Check against original and generated signatures
-      if (this.existingSignatures.has(candidate.signature)) {
-        this.collisionCount++;
-        continue; // Reject and generate another combination
-      }
-
-      // Accept NFT
-      this.existingSignatures.add(candidate.signature);
-      const tokenId = generated + 1;
-
-      const nftData = {
-        tokenId: tokenId,
-        signature: candidate.signature,
-        traits: candidate.traits,
-        metadata: this.formatMetadata(tokenId, candidate.traits)
-      };
-
-      this.generatedNFTs.push(nftData);
-      generated++;
-
-      if (generated % 50 === 0 || generated === targetCount) {
-        const elapsedSec = (performance.now() - startTime) / 1000;
-        const speed = (generated / elapsedSec).toFixed(1);
-        onProgress({
-          current: generated,
-          total: targetCount,
-          collisions: this.collisionCount,
-          speed: speed,
-          latestNft: nftData
-        });
-        // Yield thread to UI render pass
-        await new Promise(r => setTimeout(r, 0));
-      }
+    if (this.layerManager.layerOrder.length === 0) {
+      alert("No layers imported! Please upload layers first.");
+      return;
     }
 
-    this.isGenerating = false;
-    if (onComplete) onComplete(this.generatedNFTs);
+    this.isGenerating = true;
+    this.generatedNFTs = [];
+
+    // Initialize Web Worker
+    if (this.worker) this.worker.terminate();
+    this.worker = new Worker('js/generatorWorker.js');
+
+    // Convert Map to Array for Web Worker serialization
+    const layersArray = Array.from(this.layerManager.layers.entries()).map(([key, val]) => [
+      key,
+      val.map(item => ({ name: item.name, weight: item.weight, path: item.path }))
+    ]);
+
+    // Send init message to worker
+    this.worker.postMessage({
+      action: 'INIT',
+      payload: {
+        layerOrder: this.layerManager.layerOrder,
+        layers: layersArray,
+        existingSignatures: Array.from(this.existingSignatures)
+      }
+    });
+
+    // Start process in worker
+    this.worker.postMessage({
+      action: 'START_GENERATION',
+      payload: { targetCount }
+    });
+
+    // Handle messages from Worker
+    this.worker.onmessage = (e) => {
+      const { type, payload } = e.data;
+
+      if (type === 'PROGRESS') {
+        // Find full trait assets to render preview in UI
+        const hydratedTraits = payload.latestNft.traits.map(t => {
+          const layerTraits = this.layerManager.layers.get(t.layer) || [];
+          const asset = layerTraits.find(x => x.name === t.traitName);
+          return { ...t, asset };
+        });
+
+        const nftData = {
+          tokenId: payload.latestNft.tokenId,
+          signature: payload.latestNft.signature,
+          traits: hydratedTraits,
+          metadata: this.formatMetadata(payload.latestNft.tokenId, hydratedTraits)
+        };
+
+        this.generatedNFTs.push(nftData);
+
+        onProgress({
+          current: payload.current,
+          total: payload.total,
+          collisions: payload.collisions,
+          speed: payload.speed,
+          latestNft: nftData
+        });
+      } 
+      else if (type === 'COMPLETE') {
+        this.isGenerating = false;
+        this.worker.terminate();
+        if (onComplete) onComplete(this.generatedNFTs);
+      }
+    };
   }
 
   formatMetadata(tokenId, traits) {
     return {
       name: `Collection #${tokenId}`,
-      description: "Official extension collection generated via Client-Side Generator Studio.",
+      description: "Generated via Client-Side NFT Studio Pro.",
       image: `ipfs://REPLACE_WITH_CID/${tokenId}.png`,
       attributes: traits.map(t => ({
         trait_type: t.layer,
@@ -125,7 +138,8 @@ export class GeneratorEngine {
     };
   }
 
-  pause() { this.isPaused = true; }
-  resume() { this.isPaused = false; }
-  stop() { this.isGenerating = false; }
+  stop() {
+    if (this.worker) this.worker.terminate();
+    this.isGenerating = false;
+  }
 }
